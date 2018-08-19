@@ -1,0 +1,13 @@
+[package]
+name = "test_os"
+version = "0.1.0"
+authors = ["user"]
+
+[package.metadata.bootimage]
+default-target = "x86_64-test_os.json"
+
+[dependencies]
+bootloader_precompiled = "0.2.0"
+spin = "0.4.9"
+volatile = "0.2.4"
+lazy_static = { version = "1.1.0", features = ["spin_no_std"] }
