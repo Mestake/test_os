@@ -7,21 +7,19 @@
 extern crate test_os;
 
 use core::panic::PanicInfo;
+use test_os::exit_qemu;
+
+#[cfg(not(test))]
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    panic!();
+}
 
 #[cfg(not(test))]
 #[panic_implementation]
 #[no_mangle]
 pub fn panic(_info: &PanicInfo) -> ! {
-    loop {}
-}
-
-#[cfg(not(test))]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    vga_println!("Hello World{}", "!");
-    serial_println!("Hello Host{}", "!");
+    serial_println!("ok");
 
     unsafe { exit_qemu(); }
-
-    loop {}
 }

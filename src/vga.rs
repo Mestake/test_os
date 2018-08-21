@@ -28,7 +28,7 @@ pub enum Color {
     White = 15,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct ColorCode(u8);
 
 impl ColorCode {
@@ -38,7 +38,7 @@ impl ColorCode {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(C)]
 struct ScreenChar {
     ascii_character: u8,
@@ -56,21 +56,6 @@ pub struct Writer {
 
 
 impl Writer {
-    pub fn new(foreground: Color,
-               background: Color,
-               col: usize,
-               row: usize) -> Self {
-        let color_code = ColorCode::new(foreground, background);
-        let buffer_addr = 0xb8000 as *mut VgaBuffer;
-
-        Writer {
-            color_code,
-            buffer: unsafe { &mut *buffer_addr },
-            col,
-            row,
-        }
-    }
-
     pub fn write_byte(&mut self, ascii_char: u8) {
         match ascii_char {
             b'\n' => self.newline(),
@@ -122,7 +107,13 @@ impl fmt::Write for Writer {
 
 impl Default for Writer {
     fn default() -> Self {
-        Writer::new(Color::White, Color::Black, 0, 0)
+        let buffer_addr = 0xb8000 as *mut VgaBuffer;
+        Writer {
+            color_code: ColorCode::new(Color::White, Color::Black),
+            buffer: unsafe { &mut *buffer_addr },
+            col: 0,
+            row: 0
+        }
     }
 }
 
@@ -131,17 +122,102 @@ lazy_static! {
     pub static ref VGA_BUFFER: Mutex<Writer> = Mutex::new(Writer::default());
 }
 
+pub fn print(args: fmt::Arguments) {
+    use ::core::fmt::Write;
+    VGA_BUFFER.lock().write_fmt(args).unwrap();
+}
 
+#[macro_export]
 macro_rules! vga_print {
     ($($args:expr),*) => {{
-        use ::core::fmt::Write;
-        let args = format_args!($($args),*);
-        $crate::vga::VGA_BUFFER.lock().write_fmt(args).unwrap();
+        $crate::vga::print(format_args!($($args),*));
     }};
 }
 
+#[macro_export]
 macro_rules! vga_println {
     () => { vga_print!("\n") };
     ($fmt:expr) => { vga_print!(concat!($fmt, "\n")); };
     ($fmt:expr, $($args:expr),*) => { vga_print!(concat!($fmt, "\n"), $($args),*); };
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use super::Color::*;
+    use array_init::array_init;
+    use volatile::Volatile;
+    use std::boxed::Box;
+
+    fn empty_char() -> ScreenChar {
+        let color_code = ColorCode::new(White, Black);
+        ScreenChar { ascii_character: b' ', color_code }
+    }
+
+    fn make_writer() -> Writer {
+        let color_code = ColorCode::new(White, Black);
+        let space = empty_char();
+        let buffer: VgaBuffer = array_init(|_| {
+            array_init(|_|Volatile::new(space))
+        });
+        let buffer: &'static mut VgaBuffer = Box::leak(Box::new(buffer));
+
+        Writer {
+            color_code,
+            buffer,
+            col: 0,
+            row: 0,
+        }
+    }
+
+    #[test]
+    fn write_byte() {
+        let mut writer = make_writer();
+        writer.write_byte(b'X');
+        writer.write_byte(b'Y');
+
+        for (i, row) in writer.buffer.iter().enumerate() {
+            for (j, screen_char) in row.iter().enumerate() {
+                let screen_char = screen_char.read();
+                if i == 0 && j == 0 {
+                    assert_eq!(screen_char.ascii_character, b'X');
+                    assert_eq!(screen_char.color_code, writer.color_code);
+                } else if i == 0 && j == 1 {
+                    assert_eq!(screen_char.ascii_character, b'Y');
+                    assert_eq!(screen_char.color_code, writer.color_code);
+                } else {
+                    assert_eq!(screen_char, empty_char());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn write_formatted() {
+        use core::fmt::Write;
+
+        let mut writer = make_writer();
+        writeln!(&mut writer, "a").unwrap();
+        writeln!(&mut writer, "b{}", "c").unwrap();
+
+        for (i, row) in writer.buffer.iter().enumerate() {
+            for (j, screen_char) in row.iter().enumerate() {
+                let screen_char = screen_char.read();
+                if i == 0 && j == 0 {
+                    assert_eq!(screen_char.ascii_character, b'a');
+                    assert_eq!(screen_char.color_code, writer.color_code);
+                } else if i == 1 && j == 0 {
+                    assert_eq!(screen_char.ascii_character, b'b');
+                    assert_eq!(screen_char.color_code, writer.color_code);
+                } else if i == 1 && j == 1 {
+                    assert_eq!(screen_char.ascii_character, b'c');
+                    assert_eq!(screen_char.color_code, writer.color_code);
+                } else {
+                    assert_eq!(screen_char, empty_char());
+                }
+            }
+        }
+    }
 }
