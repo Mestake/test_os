@@ -7,7 +7,7 @@ extern crate std;
 
 #[macro_use]
 extern crate lazy_static;
-extern crate bootloader_precompiled;
+extern crate bootloader;
 extern crate spin;
 extern crate volatile;
 extern crate uart_16550;

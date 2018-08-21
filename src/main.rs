@@ -7,6 +7,7 @@
 extern crate test_os;
 
 use core::panic::PanicInfo;
+use test_os::exit_qemu;
 
 #[cfg(not(test))]
 #[panic_implementation]
