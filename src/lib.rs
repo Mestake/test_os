@@ -1,4 +1,6 @@
 #![feature(panic_implementation)]
+#![feature(abi_x86_interrupt)]
+#![feature(asm)]
 #![no_std]
 #![cfg_attr(test, allow(dead_code, unused_macros, unused_imports))]
 
@@ -20,6 +22,20 @@ extern crate array_init;
 pub mod vga;
 #[macro_use]
 pub mod serial;
+pub mod interrupts;
+pub mod cpuio;
+pub mod memory;
+
+pub fn hang() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
+}
+
+pub fn init() {
+    memory::init();
+    interrupts::init();
+}
 
 pub unsafe fn exit_qemu() -> ! {
     use x86_64::instructions::port::Port;
@@ -27,5 +43,5 @@ pub unsafe fn exit_qemu() -> ! {
     let mut port = Port::<u32>::new(0xf4);
     port.write(0);
 
-    unreachable!()
+    unreachable!("Exiting qemu failed")
 }
